@@ -1,9 +1,9 @@
 # ============================================================
-#  File Copier — Search Subfolders & Copy by Excel List
+#  File Copier/Mover — Search Subfolders & Copy/Move by Excel List
 #  - Reads file names from an Excel column
 #  - Searches all subfolders of a source folder
-#  - COPIES (not moves) found files to a destination folder
-#  - Creates a summary report of copied / not found / errors
+#  - COPIES or MOVES found files to a destination folder (user's choice)
+#  - Creates a summary report of copied|moved / not found / errors
 # ============================================================
 #
 #  INSTALL: pip install openpyxl
@@ -22,8 +22,20 @@ root.withdraw()
 root.attributes("-topmost", True)
  
 print("=" * 60)
-print("       File Copier — Search & Copy by Excel List")
+print("       File Copier/Mover — Search & Copy/Move by Excel List")
 print("=" * 60)
+
+# ── Step 0: Ask whether to COPY or MOVE ────────────────────────
+operation = messagebox.askyesno(
+    "Copy or Move",
+    "Do you want to COPY the files or MOVE them?\n\n"
+    "Yes = COPY (keep originals in source)\n"
+    "No  = MOVE (remove originals from source)"
+)
+operation = "copy" if operation else "move"
+action_verb  = "Copied" if operation == "copy" else "Moved"
+action_ing   = "Copying" if operation == "copy" else "Moving"
+print(f"✅ Operation selected : {action_verb.upper()}")
  
 # ── Step 1: Select Excel file with file names ─────────────────
 print("\n📋 Select EXCEL file containing file names...")
@@ -93,8 +105,8 @@ if not source_folder:
 print(f"✅ Source folder : {source_folder}")
  
 # ── Step 6: Select destination folder ────────────────────────
-print("\n📁 Select DESTINATION folder (copy files here)...")
-dest_folder = filedialog.askdirectory(title="Select Destination Folder (Copy Files Here)")
+print(f"\n📁 Select DESTINATION folder ({operation} files here)...")
+dest_folder = filedialog.askdirectory(title=f"Select Destination Folder ({action_verb} Files Here)")
 if not dest_folder:
     messagebox.showerror("Cancelled", "No destination folder selected. Exiting.")
     exit()
@@ -105,7 +117,7 @@ print("\n📊 Select folder to save SUMMARY report...")
 summary_folder = filedialog.askdirectory(title="Select Folder to Save Summary Report")
 if not summary_folder:
     summary_folder = dest_folder
-summary_path = os.path.join(summary_folder, "copy_summary.csv")
+summary_path = os.path.join(summary_folder, f"{operation}_summary.csv")
  
 # ── Step 8: Ask duplicate handling ───────────────────────────
 dup_choice = messagebox.askyesno(
@@ -117,12 +129,12 @@ dup_choice = messagebox.askyesno(
  
 # ── Step 9: Progress Window ───────────────────────────────────
 progress_win = tk.Toplevel(root)
-progress_win.title("Copying Files...")
+progress_win.title(f"{action_ing} Files...")
 progress_win.geometry("620x340")
 progress_win.resizable(False, False)
 progress_win.attributes("-topmost", True)
- 
-tk.Label(progress_win, text="File Copier", font=("Segoe UI", 13, "bold")).pack(pady=(14, 4))
+
+tk.Label(progress_win, text="File Copier" if operation == "copy" else "File Mover", font=("Segoe UI", 13, "bold")).pack(pady=(14, 4))
 tk.Label(progress_win, text="Overall Progress:", font=("Segoe UI", 9)).pack(anchor="w", padx=20)
  
 overall_bar = ttk.Progressbar(progress_win, length=575, mode="determinate", maximum=len(file_names))
@@ -154,7 +166,7 @@ v_errors   = tk.StringVar(value="0")
 v_pending  = tk.StringVar(value=str(len(file_names)))
  
 stat_col(stats_frame, "Total",       v_total,    0)
-stat_col(stats_frame, "✅ Copied",    v_copied,   1)
+stat_col(stats_frame, f"✅ {action_verb}",    v_copied,   1)
 stat_col(stats_frame, "⏭️ Pending",   v_pending,  2)
 stat_col(stats_frame, "❓Not Found",  v_notfound, 3)
 stat_col(stats_frame, "⚠️ Skipped",   v_skipped,  4)
@@ -199,7 +211,7 @@ total_errors   = 0
 summary_rows   = []
  
 for idx, file_name in enumerate(file_names, start=1):
-    current_label.config(text=f"Copying ({idx}/{len(file_names)}): {file_name}")
+    current_label.config(text=f"{action_ing} ({idx}/{len(file_names)}): {file_name}")
     overall_bar["value"] = idx - 1
     overall_label.config(text=f"{idx-1} of {len(file_names)}  |  {len(file_names)-idx+1} pending")
     progress_win.update()
@@ -243,12 +255,15 @@ for idx, file_name in enumerate(file_names, start=1):
                     note = ""
  
                 try:
-                    shutil.copy2(src_path, dest_path)   # copy2 preserves metadata
+                    if operation == "copy":
+                        shutil.copy2(src_path, dest_path)   # copy2 preserves metadata
+                    else:
+                        shutil.move(src_path, dest_path)
                     total_copied += 1
-                    print(f"   ✅ Copied : {file_name}")
+                    print(f"   ✅ {action_verb} : {file_name}")
                     summary_rows.append({
                         "File Name"  : file_name,
-                        "Status"     : "Copied",
+                        "Status"     : action_verb,
                         "Source Path": src_path,
                         "Dest Path"  : dest_path,
                         "Note"       : note
@@ -269,7 +284,7 @@ for idx, file_name in enumerate(file_names, start=1):
                     "Status"     : "Duplicate in Source",
                     "Source Path": src_path,
                     "Dest Path"  : "",
-                    "Note"       : "Additional copy found in source — not copied"
+                    "Note"       : f"Additional copy found in source — not {action_verb.lower()}"
                 })
  
     # Update live stats
@@ -290,7 +305,7 @@ with open(summary_path, "w", newline="", encoding="utf-8-sig") as sf:
     writer.writerow({})
     writer.writerow({"File Name": "── SUMMARY ──"})
     writer.writerow({"File Name": "Total Files in List",  "Status": len(file_names)})
-    writer.writerow({"File Name": "Copied Successfully",  "Status": total_copied})
+    writer.writerow({"File Name": f"{action_verb} Successfully",  "Status": total_copied})
     writer.writerow({"File Name": "Not Found",            "Status": total_notfound})
     writer.writerow({"File Name": "Skipped (Duplicate)",  "Status": total_skipped})
     writer.writerow({"File Name": "Errors",               "Status": total_errors})
@@ -299,9 +314,9 @@ with open(summary_path, "w", newline="", encoding="utf-8-sig") as sf:
 progress_win.destroy()
  
 summary_msg = (
-    f"✅ File Copy Complete!\n\n"
+    f"✅ File {action_verb} Complete!\n\n"
     f"📋 Files in List       : {len(file_names)}\n"
-    f"✅ Copied Successfully : {total_copied}\n"
+    f"✅ {action_verb} Successfully : {total_copied}\n"
     f"❓ Not Found           : {total_notfound}\n"
     f"⚠️  Skipped             : {total_skipped}\n"
     f"❌ Errors              : {total_errors}\n\n"
